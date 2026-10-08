@@ -1,0 +1,209 @@
+syntax = "proto3";
+
+package raindrop.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "RaindropServer.Grpc.Protocol";
+
+// Accounts and sessions. A client holds its own UUID per server; the first login with it is
+// registration. Every call but the first six needs a session: send its token as
+// `authorization: Bearer <token>` metadata.
+service UserService {
+  // What this UUID means here, so a client knows which flow to show. Anonymous.
+  rpc GetUserStatus(GetUserStatusRequest) returns (GetUserStatusResponse);
+
+  // Whether a username can be claimed right now, for the registration screen. Anonymous.
+  rpc CheckUsername(CheckUsernameRequest) returns (CheckUsernameResponse);
+
+  // First login: claim a username and set a password for this UUID, and get a session. Anonymous.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+
+  // UUID (or username) and password to a session. Anonymous.
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // Restore an account that left with its data preserved. Anonymous.
+  rpc Rejoin(RejoinRequest) returns (RejoinResponse);
+
+  // End this session.
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+
+  // The caller's own account.
+  rpc GetMe(GetMeRequest) returns (GetMeResponse);
+
+  // What another member is allowed to see about a UUID, e.g. to name a message's author.
+  rpc LookupUser(LookupUserRequest) returns (LookupUserResponse);
+
+  // Change the password. Ends every session, this one included, and returns a new one.
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse);
+
+  // Claim a different username.
+  rpc ChangeUsername(ChangeUsernameRequest) returns (ChangeUsernameResponse);
+
+  // Leave the server, preserving the account for a possible return or erasing it now.
+  rpc LeaveServer(LeaveServerRequest) returns (LeaveServerResponse);
+}
+
+// Where a UUID stands on this server.
+enum UserState {
+  USER_STATE_UNSPECIFIED = 0;
+  // Never registered here.
+  USER_STATE_UNREGISTERED = 1;
+  USER_STATE_ACTIVE = 2;
+  // Left, keeping username and password until the retention window closes.
+  USER_STATE_LEFT_PRESERVED = 3;
+  // Left and erased; the UUID may register again from scratch.
+  USER_STATE_ERASED = 4;
+}
+
+// The caller's own account.
+message UserProfile {
+  string user_id = 1;
+  string username = 2;
+  UserState state = 3;
+  google.protobuf.Timestamp created_at = 4;
+  optional google.protobuf.Timestamp last_login_at = 5;
+}
+
+// What any member may see about a UUID.
+message PublicUserProfile {
+  string user_id = 1;
+  // Absent once the account has been erased.
+  optional string username = 2;
+  UserState state = 3;
+}
+
+// A freshly opened session and the account it belongs to.
+message Session {
+  UserProfile user = 1;
+  // Sent as `authorization: Bearer <token>` metadata on every authenticated call.
+  string token = 2;
+  // When the session lapses if the client goes idle; the event stream's heartbeat keeps it alive.
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+// Asks what a UUID means here.
+message GetUserStatusRequest {
+  string user_id = 1;
+}
+
+// unregistered or erased: register; active: ask for the password; left_preserved: offer to rejoin.
+message GetUserStatusResponse {
+  string user_id = 1;
+  UserState state = 2;
+  optional string username = 3;
+  // When a preserved account will be erased.
+  optional google.protobuf.Timestamp data_expires_at = 4;
+}
+
+// Asks whether a username is free.
+message CheckUsernameRequest {
+  string username = 1;
+}
+
+// Whether the username is free, and why not when it is not.
+message CheckUsernameResponse {
+  string username = 1;
+  bool available = 2;
+  optional string reason = 3;
+}
+
+// Claims a username and password for the client's own UUID.
+message RegisterRequest {
+  string user_id = 1;
+  string username = 2;
+  string password = 3;
+}
+
+// The new account's first session.
+message RegisterResponse {
+  Session session = 1;
+}
+
+// Logs in by UUID, or by username for a client that lost its UUID.
+message LoginRequest {
+  optional string user_id = 1;
+  optional string username = 2;
+  string password = 3;
+}
+
+// The new session.
+message LoginResponse {
+  Session session = 1;
+}
+
+// Restores a preserved account, by UUID or by its still-reserved username.
+message RejoinRequest {
+  optional string user_id = 1;
+  optional string username = 2;
+  string password = 3;
+}
+
+// The restored account's session.
+message RejoinResponse {
+  Session session = 1;
+}
+
+// Ends the calling session.
+message LogoutRequest {}
+
+// A human-readable confirmation.
+message LogoutResponse {
+  string message = 1;
+}
+
+// Asks for the caller's own account.
+message GetMeRequest {}
+
+// The caller's own account.
+message GetMeResponse {
+  UserProfile user = 1;
+}
+
+// Asks what a UUID's name is.
+message LookupUserRequest {
+  string user_id = 1;
+}
+
+// What any member may see about that UUID.
+message LookupUserResponse {
+  PublicUserProfile user = 1;
+}
+
+// Replaces the password, confirming the current one.
+message ChangePasswordRequest {
+  string current_password = 1;
+  string new_password = 2;
+}
+
+// The session that replaces every one the change ended.
+message ChangePasswordResponse {
+  Session session = 1;
+}
+
+// Claims a different username.
+message ChangeUsernameRequest {
+  string username = 1;
+}
+
+// The account under its new name.
+message ChangeUsernameResponse {
+  UserProfile user = 1;
+}
+
+// Leaves the server.
+message LeaveServerRequest {
+  // Confirms an irreversible request.
+  string password = 1;
+  // True keeps the username and password for a possible return; false erases them now. Messages
+  // stay either way: they belong to the UUID, not the account.
+  bool preserve_data = 2;
+}
+
+// What was kept and what was deleted.
+message LeaveServerResponse {
+  // left_preserved or erased.
+  UserState state = 1;
+  optional google.protobuf.Timestamp data_expires_at = 2;
+  string message = 3;
+}

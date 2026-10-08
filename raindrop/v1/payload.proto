@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package raindrop.v1;
+
+option csharp_namespace = "RaindropServer.Grpc.Protocol";
+
+// What goes inside an end-to-end encrypted message: the plaintext of an MLS application message. Only
+// clients ever see it; the server stores and relays the ciphertext and never decodes this.
+//
+// On the wire (inside the MLS message) it is the single version byte 0x02 followed by this message.
+// Version 1 was MessagePack, whose first byte is always a map marker (0x80–0x8f, 0xde, 0xdf), so the
+// two cannot be confused and clients keep reading old history.
+//
+// The attestation is computed over fields, not over this encoding, so it is the same in both versions
+// (see RaindropCrypto/docs/wire-contracts.md, message attestation v1/v2).
+message MessagePayload {
+  // "text" or "files". An open set: a client shows a placeholder for one it does not know.
+  string type = 1;
+  // The text, or a files message's caption (possibly empty).
+  string body = 2;
+  // Chosen by the sender before encrypting, so its own copy can be matched with the server's echo.
+  string client_message_id = 3;
+  // The sender's clock, informational; the server's sent_at orders the timeline.
+  int64 sent_at_unix_ms = 4;
+  // The sending device's Ed25519 signature over the attestation bytes; absent from a client that
+  // does not attest.
+  optional bytes attestation = 5;
+  // A files message's files, in the order they are shown.
+  repeated AttachmentDescriptor files = 6;
+}
+
+// One encrypted file as a files message describes it: everything a recipient needs to fetch and open
+// it, none of which the server sees except attachment_id.
+message AttachmentDescriptor {
+  string attachment_id = 1;
+  // The file's own raindrop/attachment/v1 key, 32 bytes.
+  bytes key = 2;
+  // The sender's file name. Never trusted as a path: only its last component is used.
+  string name = 3;
+  string mime_type = 4;
+  // The plaintext size.
+  int64 size = 5;
+  // What the downloaded ciphertext must hash to before it is opened, 32 bytes.
+  bytes ciphertext_sha256 = 6;
+  // A small JPEG preview the sender made, uploaded as its own attachment.
+  optional ThumbnailDescriptor thumbnail = 7;
+  // For an image or video, its size in pixels.
+  optional uint32 width = 8;
+  optional uint32 height = 9;
+  // For audio or video, how long it plays.
+  optional int64 duration_ms = 10;
+}
+
+// A sender-made preview of a file.
+message ThumbnailDescriptor {
+  string attachment_id = 1;
+  bytes key = 2;
+  bytes ciphertext_sha256 = 3;
+}

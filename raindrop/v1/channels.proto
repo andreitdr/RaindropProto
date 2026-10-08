@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package raindrop.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "RaindropServer.Grpc.Protocol";
+
+// What every channel has in common: create, list, read, rename, delete. A channel the caller may not
+// see is reported as channel_not_found, never as forbidden.
+service ChannelService {
+  // Every channel the caller may see, ordered by name, with what they may do in each.
+  rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse);
+
+  // One channel, and what the caller may do in it.
+  rpc GetChannel(GetChannelRequest) returns (GetChannelResponse);
+
+  // Create a channel of a given type.
+  rpc CreateChannel(CreateChannelRequest) returns (CreateChannelResponse);
+
+  // Rename it: needs rename_channels, or having created it.
+  rpc RenameChannel(RenameChannelRequest) returns (RenameChannelResponse);
+
+  // Delete it and everything in it: needs delete_channels, or having created it.
+  rpc DeleteChannel(DeleteChannelRequest) returns (DeleteChannelResponse);
+}
+
+// A channel as the caller sees it.
+message Channel {
+  string channel_id = 1;
+  // "text" or "voice". An open set: a server may host types a client does not know, which it hides.
+  string type = 2;
+  string name = 3;
+  string created_by = 4;
+  google.protobuf.Timestamp created_at = 5;
+  // What the calling member may do here, as permission names.
+  repeated string your_permissions = 6;
+}
+
+// Asks for every visible channel.
+message ListChannelsRequest {}
+
+// Every visible channel, by name.
+message ListChannelsResponse {
+  repeated Channel channels = 1;
+}
+
+// Asks about one channel.
+message GetChannelRequest {
+  string channel_id = 1;
+}
+
+// The channel.
+message GetChannelResponse {
+  Channel channel = 1;
+}
+
+// Creates a channel.
+message CreateChannelRequest {
+  string type = 1;
+  string name = 2;
+}
+
+// The new channel.
+message CreateChannelResponse {
+  Channel channel = 1;
+}
+
+// Renames a channel.
+message RenameChannelRequest {
+  string channel_id = 1;
+  string name = 2;
+}
+
+// The channel under its new name.
+message RenameChannelResponse {
+  Channel channel = 1;
+}
+
+// Deletes a channel.
+message DeleteChannelRequest {
+  string channel_id = 1;
+}
+
+// What went with it.
+message DeleteChannelResponse {
+  string channel_id = 1;
+  string message = 2;
+}

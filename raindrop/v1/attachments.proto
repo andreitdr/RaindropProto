@@ -1,0 +1,199 @@
+syntax = "proto3";
+
+package raindrop.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "RaindropServer.Grpc.Protocol";
+
+// Encrypted files. The sender encrypts each file under its own key (raindrop/attachment/v1), uploads
+// the ciphertext, and names the upload in SendEncryptedMessage; the key travels inside the MLS message.
+// The server learns a file's channel, declared extension and size, nothing else.
+service AttachmentService {
+  // What this server accepts, so a client can refuse a file before uploading any of it.
+  rpc GetAttachmentPolicy(GetAttachmentPolicyRequest) returns (GetAttachmentPolicyResponse);
+
+  // Start an upload: needs send_messages and attach_files in the channel, and a bound session.
+  rpc CreateUpload(CreateUploadRequest) returns (CreateUploadResponse);
+
+  // Stream ciphertext into an upload: a header first, then data frames of at most the policy's
+  // upload_frame_bytes each. The header's offset must be where the upload stands
+  // (upload_offset_mismatch otherwise). A broken stream keeps what arrived; resume from
+  // GetUploadStatus.
+  rpc Upload(stream UploadRequest) returns (UploadResponse);
+
+  // Where an upload stands: how many bytes have arrived, to resume.
+  rpc GetUploadStatus(GetUploadStatusRequest) returns (GetUploadStatusResponse);
+
+  // Finish an upload, checked against the ciphertext's SHA-256.
+  rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse);
+
+  // Throw away an upload not yet sent in a message.
+  rpc CancelUpload(CancelUploadRequest) returns (CancelUploadResponse);
+
+  // Stream a file's ciphertext, from an offset, to anyone who can see its channel: a header first,
+  // then data frames. Every failure is attachment_not_found, so ids cannot be probed.
+  rpc Download(DownloadRequest) returns (stream DownloadResponse);
+}
+
+// What an attachment is to the message that carries it.
+enum AttachmentKind {
+  ATTACHMENT_KIND_UNSPECIFIED = 0;
+  // A file the message shows. The default when creating an upload.
+  ATTACHMENT_KIND_FILE = 1;
+  // A sender-made preview of another file in the same message.
+  ATTACHMENT_KIND_THUMBNAIL = 2;
+}
+
+// Where an upload stands.
+enum UploadState {
+  UPLOAD_STATE_UNSPECIFIED = 0;
+  UPLOAD_STATE_UPLOADING = 1;
+  // Complete and checked; waiting to be sent in a message.
+  UPLOAD_STATE_UPLOADED = 2;
+  // Sent in a message.
+  UPLOAD_STATE_ATTACHED = 3;
+}
+
+// A list of extensions whose presence means something (absent: any extension that is not blocked).
+message ExtensionList {
+  repeated string extensions = 1;
+}
+
+// What this server accepts. Extensions are lower case without the dot.
+message AttachmentPolicy {
+  bool enabled = 1;
+  // The largest file in bytes of plaintext, unless its extension has its own limit.
+  int64 maximum_file_bytes = 2;
+  map<string, int64> maximum_file_bytes_by_extension = 3;
+  // The only extensions accepted; absent for any that is not blocked.
+  optional ExtensionList allowed_extensions = 4;
+  // Never accepted; wins over allowed_extensions.
+  repeated string blocked_extensions = 5;
+  bool allow_files_without_extension = 6;
+  // Not counting thumbnails.
+  int32 maximum_files_per_message = 7;
+  int64 maximum_thumbnail_bytes = 8;
+  // Which types clients should show inline, when they can.
+  repeated string preview_extensions = 9;
+  // The largest previewable file a client loads without being asked.
+  int64 preview_auto_load_maximum_bytes = 10;
+  // The most bytes one Upload data frame may carry.
+  int32 upload_frame_bytes = 11;
+}
+
+// Where an upload stands.
+message UploadStatus {
+  string attachment_id = 1;
+  UploadState state = 2;
+  // How many bytes the ciphertext will be.
+  int64 ciphertext_size = 3;
+  // How many have arrived: where the next Upload starts.
+  int64 received_size = 4;
+  // The most bytes one Upload data frame may carry.
+  int32 frame_bytes = 5;
+  // When it is thrown away unless it has been sent in a message.
+  google.protobuf.Timestamp expires_at = 6;
+}
+
+// Asks for the policy.
+message GetAttachmentPolicyRequest {}
+
+// The policy.
+message GetAttachmentPolicyResponse {
+  AttachmentPolicy policy = 1;
+}
+
+// Starts an upload.
+message CreateUploadRequest {
+  // The text channel it will be sent in; it cannot be sent anywhere else.
+  string channel_id = 1;
+  // The file's extension without the dot; empty for none. Lower-cased by the server.
+  string extension = 2;
+  // The ciphertext's length, which fixes the plaintext length exactly.
+  int64 ciphertext_size = 3;
+  // Unspecified means file.
+  AttachmentKind kind = 4;
+}
+
+// The new upload.
+message CreateUploadResponse {
+  UploadStatus status = 1;
+}
+
+// Which upload a stream writes to, and from where.
+message UploadHeader {
+  string attachment_id = 1;
+  // Must equal the upload's received_size.
+  int64 offset = 2;
+}
+
+// One frame of an upload stream: the header first, then data.
+message UploadRequest {
+  // Exactly one per frame.
+  oneof frame {
+    UploadHeader header = 1;
+    bytes data = 2;
+  }
+}
+
+// Where the upload stands once the stream ends.
+message UploadResponse {
+  UploadStatus status = 1;
+}
+
+// Asks where an upload stands.
+message GetUploadStatusRequest {
+  string attachment_id = 1;
+}
+
+// Where it stands.
+message GetUploadStatusResponse {
+  UploadStatus status = 1;
+}
+
+// Finishes an upload.
+message CompleteUploadRequest {
+  string attachment_id = 1;
+  // SHA-256 of the whole ciphertext, which the stored bytes must match.
+  bytes ciphertext_sha256 = 2;
+}
+
+// The finished upload.
+message CompleteUploadResponse {
+  UploadStatus status = 1;
+}
+
+// Throws an upload away.
+message CancelUploadRequest {
+  string attachment_id = 1;
+}
+
+// The upload that was thrown away.
+message CancelUploadResponse {
+  string attachment_id = 1;
+}
+
+// Downloads a file.
+message DownloadRequest {
+  string attachment_id = 1;
+  // Where to start: the size of what a client already has, to resume.
+  int64 offset = 2;
+}
+
+// What a download stream carries before its data.
+message DownloadHeader {
+  // The whole ciphertext's length.
+  int64 ciphertext_size = 1;
+  // Where the data frames start (the requested offset).
+  int64 offset = 2;
+}
+
+// One frame of a download stream: the header first, then data.
+message DownloadResponse {
+  // Exactly one per frame.
+  oneof frame {
+    DownloadHeader header = 1;
+    bytes data = 2;
+  }
+}

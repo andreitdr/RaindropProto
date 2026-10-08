@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package raindrop.v1;
+
+option csharp_namespace = "RaindropServer.Grpc.Protocol";
+
+// The handshake: what this server is and how to trust it. The only call a client makes before it has
+// pinned anything, so it is anonymous and answers nothing about anybody.
+service ServerService {
+  // What protocol this server speaks, the certificate fingerprint to pin, the identity key that
+  // vouches for it, and which optional features it offers.
+  rpc GetServerInfo(GetServerInfoRequest) returns (GetServerInfoResponse);
+}
+
+// Asks for the handshake; carries nothing.
+message GetServerInfoRequest {}
+
+// The handshake.
+message GetServerInfoResponse {
+  // The Raindrop protocol this server speaks. "2" is the first gRPC version.
+  string protocol_version = 1;
+
+  // SHA-256 of the TLS certificate, lower-case hex without separators. Absent only when the server
+  // could not read its own certificate.
+  optional string tls_fingerprint = 2;
+
+  // The server's long-lived P-256 public key, as an uncompressed point (0x04 ‖ X ‖ Y). Pinned
+  // alongside the fingerprint.
+  optional bytes identity_key = 3;
+
+  // identity_key's ECDSA-SHA256 signature (r ‖ s) over "raindrop/tls-binding/v1\n" + tls_fingerprint.
+  // A client whose pinned fingerprint no longer matches follows the change only when its pinned
+  // identity key signed the certificate it was actually presented.
+  optional bytes tls_binding_signature = 4;
+
+  // Optional features, e.g. "e2ee.delivery.v1", "attachments.v1". An open set: a client ignores
+  // names it does not know.
+  repeated string capabilities = 5;
+}

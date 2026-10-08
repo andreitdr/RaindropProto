@@ -1,0 +1,204 @@
+syntax = "proto3";
+
+package raindrop.v1;
+
+option csharp_namespace = "RaindropServer.Grpc.Protocol";
+
+// The MLS delivery service: one group per channel (group id = the channel UUID as 16 big-endian
+// bytes), one commit per epoch, key packages and Welcomes. Every MLS structure is opaque bytes the
+// server reads only the cleartext framing of. Every call needs a bound session.
+service DeliveryService {
+  // Start a channel's group from its first group info.
+  rpc CreateGroup(CreateGroupRequest) returns (CreateGroupResponse);
+
+  // The group's epoch and latest group info, for joining by external commit.
+  rpc GetGroupState(GetGroupStateRequest) returns (GetGroupStateResponse);
+
+  // Submit a commit made in the current epoch. A second one for the same epoch is epoch_conflict.
+  rpc SubmitCommit(SubmitCommitRequest) returns (SubmitCommitResponse);
+
+  // Publish a group info for the current epoch.
+  rpc PutGroupInfo(PutGroupInfoRequest) returns (PutGroupInfoResponse);
+
+  // Catch up: the commits from an epoch on.
+  rpc SyncGroup(SyncGroupRequest) returns (SyncGroupResponse);
+
+  // Every device that should be in the channel's group right now.
+  rpc GetGroupRoster(GetGroupRosterRequest) returns (GetGroupRosterResponse);
+
+  // Upload key packages for this session's device.
+  rpc UploadKeyPackages(UploadKeyPackagesRequest) returns (UploadKeyPackagesResponse);
+
+  // Claim one key package per device, to add those devices to a group.
+  rpc ClaimKeyPackages(ClaimKeyPackagesRequest) returns (ClaimKeyPackagesResponse);
+
+  // How many one-time key packages this device has left on the server.
+  rpc GetKeyPackageCount(GetKeyPackageCountRequest) returns (GetKeyPackageCountResponse);
+
+  // Welcomes waiting for this device.
+  rpc ListWelcomes(ListWelcomesRequest) returns (ListWelcomesResponse);
+
+  // Drop Welcomes this device has processed.
+  rpc AckWelcomes(AckWelcomesRequest) returns (AckWelcomesResponse);
+}
+
+// A device, named by its owner and its own id.
+message DeviceRef {
+  string user_id = 1;
+  string device_id = 2;
+}
+
+// Where a channel's group stands.
+message GroupState {
+  string channel_id = 1;
+  // The epoch the next commit must be made in.
+  int64 epoch = 2;
+  // The latest published MLS GroupInfo.
+  optional bytes group_info = 3;
+  // The epoch group_info describes; behind epoch until a member publishes a newer one.
+  int64 group_info_epoch = 4;
+}
+
+// One accepted commit.
+message GroupCommit {
+  int64 epoch = 1;
+  bytes message = 2;
+}
+
+// A key package claimed for one device.
+message ClaimedKeyPackage {
+  string user_id = 1;
+  string device_id = 2;
+  bytes key_package = 3;
+}
+
+// A Welcome waiting for this device.
+message PendingWelcome {
+  string welcome_id = 1;
+  string channel_id = 2;
+  int64 epoch = 3;
+  bytes welcome = 4;
+}
+
+// Starts a group.
+message CreateGroupRequest {
+  string channel_id = 1;
+  // The new group's signed MLS GroupInfo.
+  bytes group_info = 2;
+}
+
+// The new group's state.
+message CreateGroupResponse {
+  GroupState state = 1;
+}
+
+// Asks where a group stands.
+message GetGroupStateRequest {
+  string channel_id = 1;
+}
+
+// The group's state.
+message GetGroupStateResponse {
+  GroupState state = 1;
+}
+
+// Submits a commit.
+message SubmitCommitRequest {
+  string channel_id = 1;
+  bytes commit = 2;
+  // For the devices the commit adds, if any.
+  optional bytes welcome = 3;
+  // Which devices those are: the server cannot tell from the Welcome.
+  repeated DeviceRef welcome_recipients = 4;
+}
+
+// The group's epoch now that the commit is accepted.
+message SubmitCommitResponse {
+  int64 epoch = 1;
+}
+
+// Publishes a group info.
+message PutGroupInfoRequest {
+  string channel_id = 1;
+  bytes group_info = 2;
+}
+
+// The group's state.
+message PutGroupInfoResponse {
+  GroupState state = 1;
+}
+
+// Asks for commits from an epoch on.
+message SyncGroupRequest {
+  string channel_id = 1;
+  int64 from_epoch = 2;
+}
+
+// Commits from the requested epoch on, oldest first — possibly one page of many.
+message SyncGroupResponse {
+  int64 epoch = 1;
+  repeated GroupCommit commits = 2;
+  // Commits this device needs have been pruned: rejoin by external commit.
+  bool resync_required = 3;
+}
+
+// Asks who belongs in a group.
+message GetGroupRosterRequest {
+  string channel_id = 1;
+}
+
+// Every device that should be in the group.
+message GetGroupRosterResponse {
+  string channel_id = 1;
+  repeated DeviceRef devices = 2;
+}
+
+// Uploads key packages, each an MLSMessage-wrapped KeyPackage.
+message UploadKeyPackagesRequest {
+  repeated bytes key_packages = 1;
+  // A reusable package to hand out when the one-time ones run out.
+  optional bytes last_resort = 2;
+}
+
+// How many one-time packages this device now has.
+message UploadKeyPackagesResponse {
+  int32 one_time = 1;
+}
+
+// Claims key packages.
+message ClaimKeyPackagesRequest {
+  // The channel whose group the devices are being added to.
+  string channel_id = 1;
+  repeated DeviceRef devices = 2;
+}
+
+// One per device that had one; devices with none are left out.
+message ClaimKeyPackagesResponse {
+  repeated ClaimedKeyPackage key_packages = 1;
+}
+
+// Asks how many one-time packages are left.
+message GetKeyPackageCountRequest {}
+
+// How many one-time packages are left.
+message GetKeyPackageCountResponse {
+  int32 one_time = 1;
+}
+
+// Asks for waiting Welcomes.
+message ListWelcomesRequest {}
+
+// The waiting Welcomes.
+message ListWelcomesResponse {
+  repeated PendingWelcome welcomes = 1;
+}
+
+// Acknowledges Welcomes.
+message AckWelcomesRequest {
+  repeated string welcome_ids = 1;
+}
+
+// A human-readable confirmation.
+message AckWelcomesResponse {
+  string message = 1;
+}

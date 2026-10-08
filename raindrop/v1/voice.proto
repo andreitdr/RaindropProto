@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+package raindrop.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "RaindropServer.Grpc.Protocol";
+
+// Voice calls. Raindrop decides who may join, speak and moderate; the audio itself goes over the media
+// transport a join names (LiveKit today: WebRTC, its signalling relayed by this server as a WebSocket,
+// end-to-end encrypted with a key from the channel's MLS group). This service is the control half only.
+service VoiceService {
+  // Whether voice works here, and who is in every call the caller can see.
+  rpc GetVoiceStatus(GetVoiceStatusRequest) returns (GetVoiceStatusResponse);
+
+  // Join a call: needs connect. Returns where to connect and a short-lived token.
+  rpc JoinVoice(JoinVoiceRequest) returns (JoinVoiceResponse);
+
+  // Leave the named call. Idempotent; only the session that joined can leave.
+  rpc LeaveVoice(LeaveVoiceRequest) returns (LeaveVoiceResponse);
+
+  // Self mute and deafen, for everybody's icons.
+  rpc SetVoiceSelfState(SetVoiceSelfStateRequest) returns (SetVoiceSelfStateResponse);
+
+  // Mute or unmute a member for everyone: needs mute_members server-wide.
+  rpc MuteVoiceMember(MuteVoiceMemberRequest) returns (MuteVoiceMemberResponse);
+}
+
+// One member in one call, the whole state: merge on (channel_id, user_id).
+message VoiceParticipant {
+  string channel_id = 1;
+  string user_id = 2;
+  bool self_mute = 3;
+  // Implies self_mute.
+  bool self_deaf = 4;
+  // A moderator muted them for everyone.
+  bool server_mute = 5;
+  // They may listen but not talk: they lack speak.
+  bool suppressed = 6;
+  // The media server has seen them connect.
+  bool connected = 7;
+  google.protobuf.Timestamp joined_at = 8;
+}
+
+// Asks for voice status.
+message GetVoiceStatusRequest {}
+
+// Whether voice works, and every visible call.
+message GetVoiceStatusResponse {
+  // False when the server has no media server; joining is refused with voice_unavailable.
+  bool available = 1;
+  // e.g. "livekit"; "none" when unavailable.
+  string transport = 2;
+  int32 maximum_participants = 3;
+  // By channel, then join time.
+  repeated VoiceParticipant participants = 4;
+}
+
+// Joins a call.
+message JoinVoiceRequest {
+  string channel_id = 1;
+  // Join already muted, so nobody sees you unmuted for a moment.
+  bool self_mute = 2;
+  bool self_deaf = 3;
+}
+
+// What a client needs to connect to the call it was just admitted to.
+message JoinVoiceResponse {
+  string channel_id = 1;
+  // Which media transport to connect with. A client that does not know it cannot join.
+  string transport = 2;
+  // An absolute address, or absent to connect through this server at path.
+  optional string url = 3;
+  optional string path = 4;
+  // The transport's short-lived credential; join again for a fresh one.
+  string token = 5;
+  google.protobuf.Timestamp expires_at = 6;
+  VoiceParticipant you = 7;
+  // Everybody in the call, you included, by join time.
+  repeated VoiceParticipant participants = 8;
+}
+
+// Leaves a call, named so a late leave cannot end a call another device has since joined.
+message LeaveVoiceRequest {
+  string channel_id = 1;
+}
+
+// left is false when you were not in that call — not an error.
+message LeaveVoiceResponse {
+  bool left = 1;
+}
+
+// Sets your own mute and deafen.
+message SetVoiceSelfStateRequest {
+  bool self_mute = 1;
+  bool self_deaf = 2;
+}
+
+// Your state in the call now.
+message SetVoiceSelfStateResponse {
+  VoiceParticipant participant = 1;
+}
+
+// Mutes or unmutes a member for everyone.
+message MuteVoiceMemberRequest {
+  string user_id = 1;
+  bool muted = 2;
+}
+
+// changed is false when they already were (or already were not).
+message MuteVoiceMemberResponse {
+  string user_id = 1;
+  bool muted = 2;
+  bool changed = 3;
+}

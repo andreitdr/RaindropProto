@@ -1,0 +1,189 @@
+syntax = "proto3";
+
+package raindrop.v1;
+
+import "google/protobuf/duration.proto";
+import "raindrop/v1/channels.proto";
+import "raindrop/v1/members.proto";
+import "raindrop/v1/roles.proto";
+import "raindrop/v1/text.proto";
+import "raindrop/v1/voice.proto";
+
+option csharp_namespace = "RaindropServer.Grpc.Protocol";
+
+// The push channel: one long-lived stream per signed-in client, carrying every change the caller is
+// allowed to see. Events are notifications, not a source of truth: each carries the full current state
+// of what it is about, nothing is replayed, and a client re-reads after every ready.
+service EventService {
+  // Open the stream. The server sends ready first, then events; the client sends a heartbeat every
+  // ready.heartbeat_interval. The stream ends with an error whose ErrorInfo.reason says why:
+  // session_ended (log in again), too_slow (reconnect), server_stopping, connection_lost (no
+  // heartbeat arrived in time).
+  rpc Connect(stream ConnectRequest) returns (stream ConnectResponse);
+}
+
+// The client's half of the stream.
+message ConnectRequest {
+  // Exactly one per frame.
+  oneof frame {
+    Heartbeat heartbeat = 1;
+    Resubscribe resubscribe = 2;
+  }
+}
+
+// "Still here." Keeps the session alive and the member online; a stream that sends none for a while
+// is ended as connection_lost.
+message Heartbeat {}
+
+// Asks for a fresh ready on the same stream, e.g. after the app was suspended, so the client re-reads
+// without reconnecting.
+message Resubscribe {}
+
+// The server's half of the stream.
+message ConnectResponse {
+  ServerEvent event = 1;
+}
+
+// One change. Exactly one case is set; a client ignores a case it does not know.
+message ServerEvent {
+  // Which change this is, and its data.
+  oneof event {
+    ReadyEvent ready = 1;
+
+    ChannelMessage message_created = 2;
+    // The tombstone: no content or ciphertext, deleted set.
+    ChannelMessage message_deleted = 3;
+    // To members with manage_messages in the channel.
+    MessageReport message_reported = 4;
+
+    // With the recipient's own permissions.
+    Channel channel_created = 5;
+    // With the recipient's own permissions.
+    Channel channel_renamed = 6;
+    ChannelDeletedEvent channel_deleted = 7;
+
+    // Registered or rejoined.
+    MemberEvent member_joined = 8;
+    MemberEvent member_renamed = 9;
+    MemberEvent member_left = 10;
+    MemberPresenceEvent member_presence = 11;
+    MemberRolesEvent member_roles = 12;
+
+    Role role_created = 13;
+    Role role_updated = 14;
+    RoleDeletedEvent role_deleted = 15;
+
+    // Joined a call, or their state in it changed: the whole state.
+    VoiceParticipant voice_state = 16;
+    VoiceLeftEvent voice_left = 17;
+
+    DeviceEvent device_added = 18;
+    DeviceEvent device_revoked = 19;
+    // The user replaced their identity key, revoking every device: show their safety number as changed.
+    IdentityResetEvent identity_reset = 20;
+    // A commit was accepted, to everyone allowed in the group.
+    HandshakeEvent handshake = 21;
+    // A Welcome is waiting for one of the recipient's devices.
+    WelcomeEvent welcome = 22;
+    // Who should be in a group may have changed: compare with GetGroupRoster and commit the difference.
+    GroupReconcileEvent group_reconcile = 23;
+    // To its owner: a device is running out of one-time key packages.
+    KeyPackagesLowEvent key_packages_low = 24;
+
+    // An event a server plugin publishes. Built-in events never use it.
+    PluginEvent plugin = 100;
+  }
+}
+
+// The stream is open. Sent first, and again after a Resubscribe; a client re-reads after it.
+message ReadyEvent {
+  // The stream's own member.
+  string user_id = 1;
+  string protocol_version = 2;
+  // How often to send a heartbeat.
+  google.protobuf.Duration heartbeat_interval = 3;
+}
+
+// A channel and everything in it were deleted.
+message ChannelDeletedEvent {
+  string channel_id = 1;
+}
+
+// A member joined, was renamed, or left.
+message MemberEvent {
+  string user_id = 1;
+  // Their username now; absent once they have left and it has been erased.
+  optional string username = 2;
+}
+
+// A member came online or went offline.
+message MemberPresenceEvent {
+  string user_id = 1;
+  Presence presence = 2;
+}
+
+// A member was given or lost a role.
+message MemberRolesEvent {
+  string user_id = 1;
+  string role_id = 2;
+  // True when they now hold it.
+  bool assigned = 3;
+}
+
+// A role was deleted and taken away from everyone.
+message RoleDeletedEvent {
+  string role_id = 1;
+}
+
+// Somebody is no longer in a call.
+message VoiceLeftEvent {
+  string channel_id = 1;
+  string user_id = 2;
+  // left, moved, disconnected, replaced, permission_lost, session_ended, channel_deleted,
+  // server_ended — an open set: treat one you do not know as left.
+  string reason = 3;
+}
+
+// A device was registered or revoked.
+message DeviceEvent {
+  string user_id = 1;
+  string device_id = 2;
+  bytes certificate = 3;
+}
+
+// A user reset their identity key.
+message IdentityResetEvent {
+  string user_id = 1;
+}
+
+// A commit was accepted.
+message HandshakeEvent {
+  string channel_id = 1;
+  int64 epoch = 2;
+  bytes message = 3;
+}
+
+// A Welcome is waiting for one of the recipient's devices.
+message WelcomeEvent {
+  string channel_id = 1;
+  string device_id = 2;
+}
+
+// A group's membership may need reconciling.
+message GroupReconcileEvent {
+  string channel_id = 1;
+}
+
+// A device is running out of key packages.
+message KeyPackagesLowEvent {
+  string device_id = 1;
+  int32 remaining = 2;
+}
+
+// An event from a server plugin.
+message PluginEvent {
+  // The plugin's own name for it, prefixed with the plugin's name (e.g. "polls.vote").
+  string type = 1;
+  // A protobuf message the plugin defines; clients without that plugin ignore it.
+  bytes data = 2;
+}

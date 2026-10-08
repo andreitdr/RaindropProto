@@ -1,0 +1,194 @@
+syntax = "proto3";
+
+package raindrop.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "RaindropServer.Grpc.Protocol";
+
+// End-to-end encryption's identity layer: devices, session binding, key backup and device linking.
+// The server holds public keys and opaque blobs only; every bytes field here is produced and checked
+// by the clients' Rust core (see RaindropCrypto/docs/wire-contracts.md).
+service DeviceService {
+  // Register a device from its certificate. The first one sets the user's identity key.
+  rpc RegisterDevice(RegisterDeviceRequest) returns (RegisterDeviceResponse);
+
+  // Identity keys and active devices of up to 500 users.
+  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse);
+
+  // Revoke one of your devices: needs a bound session, unless it is this one.
+  rpc RevokeDevice(RevokeDeviceRequest) returns (RevokeDeviceResponse);
+
+  // With the password: forget the identity key and backup, and revoke every device.
+  rpc ResetIdentity(ResetIdentityRequest) returns (ResetIdentityResponse);
+
+  // A one-time nonce for a device key to sign.
+  rpc CreateSessionChallenge(CreateSessionChallengeRequest) returns (CreateSessionChallengeResponse);
+
+  // Bind this session to a device with that signature.
+  rpc BindSession(BindSessionRequest) returns (BindSessionResponse);
+
+  // The sealed key backup.
+  rpc GetKeyBackup(GetKeyBackupRequest) returns (GetKeyBackupResponse);
+
+  // Replace the backup: needs a bound session.
+  rpc PutKeyBackup(PutKeyBackupRequest) returns (PutKeyBackupResponse);
+
+  // A new device posts its link offer and gets the id its link code shows.
+  rpc StartDeviceLink(StartDeviceLinkRequest) returns (StartDeviceLinkResponse);
+
+  // An existing device fetches the offer, to check it against the link code.
+  rpc GetDeviceLinkOffer(GetDeviceLinkOfferRequest) returns (GetDeviceLinkOfferResponse);
+
+  // An existing device posts its encrypted approval: needs a bound session.
+  rpc ApproveDeviceLink(ApproveDeviceLinkRequest) returns (ApproveDeviceLinkResponse);
+
+  // The new device collects the approval once it is there.
+  rpc TakeDeviceLinkApproval(TakeDeviceLinkApprovalRequest) returns (TakeDeviceLinkApprovalResponse);
+}
+
+// One device.
+message Device {
+  string device_id = 1;
+  // Exactly as uploaded; clients verify it themselves.
+  bytes certificate = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+// One user's identity key and active devices.
+message UserDevices {
+  string user_id = 1;
+  // Absent before their first device is registered.
+  optional bytes identity_key = 2;
+  // Oldest first.
+  repeated Device devices = 3;
+}
+
+// Registers a device.
+message RegisterDeviceRequest {
+  // The device certificate, signed by the user's identity key.
+  bytes certificate = 1;
+}
+
+// The registered device.
+message RegisterDeviceResponse {
+  Device device = 1;
+}
+
+// Asks for users' identity keys and devices.
+message ListDevicesRequest {
+  // At most 500.
+  repeated string user_ids = 1;
+}
+
+// One entry per user asked about.
+message ListDevicesResponse {
+  repeated UserDevices users = 1;
+}
+
+// Revokes a device.
+message RevokeDeviceRequest {
+  string device_id = 1;
+}
+
+// A human-readable confirmation.
+message RevokeDeviceResponse {
+  string message = 1;
+}
+
+// Resets the user's identity.
+message ResetIdentityRequest {
+  string password = 1;
+}
+
+// A human-readable confirmation.
+message ResetIdentityResponse {
+  string message = 1;
+}
+
+// Asks for a binding challenge.
+message CreateSessionChallengeRequest {}
+
+// The challenge to sign.
+message CreateSessionChallengeResponse {
+  // 32 random bytes, usable once.
+  bytes nonce = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+// Binds the session to a device.
+message BindSessionRequest {
+  string device_id = 1;
+  // Ed25519 over "raindrop/session-binding/v1\n" ‖ nonce, by the device's signature key.
+  bytes signature = 2;
+}
+
+// A human-readable confirmation.
+message BindSessionResponse {
+  string message = 1;
+}
+
+// Asks for the key backup.
+message GetKeyBackupRequest {}
+
+// The backup, if there is one.
+message GetKeyBackupResponse {
+  optional bytes blob = 1;
+  optional google.protobuf.Timestamp updated_at = 2;
+}
+
+// Replaces the key backup.
+message PutKeyBackupRequest {
+  // The sealed backup, at most 64 KiB.
+  bytes blob = 1;
+}
+
+// The backup as stored.
+message PutKeyBackupResponse {
+  optional bytes blob = 1;
+  optional google.protobuf.Timestamp updated_at = 2;
+}
+
+// Starts a device link.
+message StartDeviceLinkRequest {
+  // The new device's offer: opaque, at most 4 KiB.
+  bytes offer = 1;
+}
+
+// The link to show in the link code.
+message StartDeviceLinkResponse {
+  string link_id = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+// Fetches a link's offer.
+message GetDeviceLinkOfferRequest {
+  string link_id = 1;
+}
+
+// The offer, for checking against the link code's commitment.
+message GetDeviceLinkOfferResponse {
+  bytes offer = 1;
+}
+
+// Approves a link.
+message ApproveDeviceLinkRequest {
+  string link_id = 1;
+  // Encrypted to the new device; at most 8 KiB.
+  bytes approval = 2;
+}
+
+// A human-readable confirmation.
+message ApproveDeviceLinkResponse {
+  string message = 1;
+}
+
+// Collects a link's approval.
+message TakeDeviceLinkApprovalRequest {
+  string link_id = 1;
+}
+
+// The approval, once an existing device has given it.
+message TakeDeviceLinkApprovalResponse {
+  optional bytes approval = 1;
+}

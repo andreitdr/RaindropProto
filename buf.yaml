@@ -1,0 +1,16 @@
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+    - COMMENTS
+  except:
+    # Fields and enum values are documented where the name alone does not say enough; a comment on
+    # every one would be noise.
+    - COMMENT_FIELD
+    - COMMENT_ENUM_VALUE
+breaking:
+  # Clients in the wild are what a change can break, and they only see the binary encoding.
+  use:
+    - WIRE

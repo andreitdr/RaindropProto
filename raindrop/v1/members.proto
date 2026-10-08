@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package raindrop.v1;
+
+option csharp_namespace = "RaindropServer.Grpc.Protocol";
+
+// The roster: who is on this server and whether each of them is around. A member is an active user.
+service MemberService {
+  // Every active member, ordered by presence and then by username.
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+}
+
+// Whether a member is around right now. Derived from their sessions and event streams, never stored.
+// Clients sort by their own copy of the display order (online first), not by these numbers, and treat
+// a value they do not know as offline.
+enum Presence {
+  PRESENCE_UNSPECIFIED = 0;
+  PRESENCE_ONLINE = 1;
+  PRESENCE_OFFLINE = 2;
+}
+
+// One member of this server, as the roster shows them.
+message Member {
+  string user_id = 1;
+  string username = 2;
+  Presence presence = 3;
+}
+
+// Asks for the roster.
+message ListMembersRequest {}
+
+// Every active member. Members who have left are not here at all.
+message ListMembersResponse {
+  repeated Member members = 1;
+}

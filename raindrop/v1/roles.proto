@@ -1,0 +1,191 @@
+syntax = "proto3";
+
+package raindrop.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "RaindropServer.Grpc.Protocol";
+
+// Roles and permissions. A role is a named set of permissions; a member holds any number of them and
+// may do the union. Reading is open to every member; writing needs manage_roles and every permission
+// involved.
+service RoleService {
+  // Every role on this server, highest position first.
+  rpc ListRoles(ListRolesRequest) returns (ListRolesResponse);
+
+  // The caller's own roles, and what they may do server-wide.
+  rpc GetMyRoles(GetMyRolesRequest) returns (GetMyRolesResponse);
+
+  // The permissions this build understands, for a role editor.
+  rpc ListPermissions(ListPermissionsRequest) returns (ListPermissionsResponse);
+
+  // One role, and the UUIDs holding it.
+  rpc GetRole(GetRoleRequest) returns (GetRoleResponse);
+
+  // Create a role.
+  rpc CreateRole(CreateRoleRequest) returns (CreateRoleResponse);
+
+  // Rename it, replace its permissions, or move it. Absent fields are left alone.
+  rpc UpdateRole(UpdateRoleRequest) returns (UpdateRoleResponse);
+
+  // Delete it and take it away from everyone holding it.
+  rpc DeleteRole(DeleteRoleRequest) returns (DeleteRoleResponse);
+
+  // Which roles one member holds, and what they add up to.
+  rpc GetMemberRoles(GetMemberRolesRequest) returns (GetMemberRolesResponse);
+
+  // Give a member a role.
+  rpc AssignRole(AssignRoleRequest) returns (AssignRoleResponse);
+
+  // Take a role away from a member.
+  rpc UnassignRole(UnassignRoleRequest) returns (UnassignRoleResponse);
+}
+
+// What kind of role it is. The two built-in kinds cannot be deleted.
+enum RoleKind {
+  ROLE_KIND_UNSPECIFIED = 0;
+  ROLE_KIND_CUSTOM = 1;
+  // Every active member holds it; it is never assigned.
+  ROLE_KIND_EVERYONE = 2;
+  // Holds administrator; neither editable nor deletable.
+  ROLE_KIND_OWNER = 3;
+}
+
+// A role. Permissions travel as names (view_channel, manage_roles, …), never as a bitfield: a client
+// too old to know one ignores it.
+message Role {
+  string role_id = 1;
+  string name = 2;
+  RoleKind kind = 3;
+  // Presentation order, highest first.
+  int32 position = 4;
+  repeated string permissions = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+// One permission this build understands.
+message PermissionDescription {
+  string name = 1;
+  string summary = 2;
+}
+
+// A permission set whose presence means something: absent leaves a role's permissions alone, present
+// and empty clears them.
+message PermissionSet {
+  repeated string permissions = 1;
+}
+
+// Asks for every role.
+message ListRolesRequest {}
+
+// Every role, highest position first.
+message ListRolesResponse {
+  repeated Role roles = 1;
+}
+
+// Asks what the caller holds.
+message GetMyRolesRequest {}
+
+// The caller's roles (everyone first) and the expanded union of what they grant.
+message GetMyRolesResponse {
+  string user_id = 1;
+  repeated Role roles = 2;
+  repeated string permissions = 3;
+}
+
+// Asks for the permission catalogue.
+message ListPermissionsRequest {}
+
+// Every permission, in the order an editor lists them.
+message ListPermissionsResponse {
+  repeated PermissionDescription permissions = 1;
+}
+
+// Asks about one role.
+message GetRoleRequest {
+  string role_id = 1;
+}
+
+// The role and who holds it, in the order they were granted it.
+message GetRoleResponse {
+  Role role = 1;
+  repeated string member_ids = 2;
+}
+
+// Creates a role.
+message CreateRoleRequest {
+  string name = 1;
+  // Empty: the role grants nothing until somebody edits it.
+  repeated string permissions = 2;
+  // Absent: above every other custom role.
+  optional int32 position = 3;
+}
+
+// The new role.
+message CreateRoleResponse {
+  Role role = 1;
+}
+
+// Edits a role. Every field but the id means "leave this alone" when absent.
+message UpdateRoleRequest {
+  string role_id = 1;
+  optional string name = 2;
+  optional PermissionSet permissions = 3;
+  optional int32 position = 4;
+}
+
+// The role as it is now.
+message UpdateRoleResponse {
+  Role role = 1;
+}
+
+// Deletes a role.
+message DeleteRoleRequest {
+  string role_id = 1;
+}
+
+// What went with it.
+message DeleteRoleResponse {
+  string role_id = 1;
+  string message = 2;
+}
+
+// Asks what one member holds.
+message GetMemberRolesRequest {
+  string user_id = 1;
+}
+
+// That member's roles (everyone first) and the expanded union of what they grant.
+message GetMemberRolesResponse {
+  string user_id = 1;
+  repeated Role roles = 2;
+  repeated string permissions = 3;
+}
+
+// Gives a member a role.
+message AssignRoleRequest {
+  string user_id = 1;
+  string role_id = 2;
+}
+
+// changed is false when they already held it — not an error.
+message AssignRoleResponse {
+  string user_id = 1;
+  string role_id = 2;
+  bool changed = 3;
+  string message = 4;
+}
+
+// Takes a role away from a member.
+message UnassignRoleRequest {
+  string user_id = 1;
+  string role_id = 2;
+}
+
+// changed is false when they already did not hold it — not an error.
+message UnassignRoleResponse {
+  string user_id = 1;
+  string role_id = 2;
+  bool changed = 3;
+  string message = 4;
+}

@@ -1,0 +1,176 @@
+syntax = "proto3";
+
+package raindrop.v1;
+
+import "google/protobuf/timestamp.proto";
+import "raindrop/v1/attachments.proto";
+
+option csharp_namespace = "RaindropServer.Grpc.Protocol";
+
+// Messages in text channels. Posting and reading are calls; everything that changes afterwards
+// arrives on the event stream.
+service TextChannelService {
+  // Post a plaintext message. Refused with encryption_required unless the server allows plaintext.
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+
+  // Post an end-to-end encrypted message: needs send_messages, a bound session, and attach_files for
+  // any attachment_ids.
+  rpc SendEncryptedMessage(SendEncryptedMessageRequest) returns (SendEncryptedMessageResponse);
+
+  // One page of history, newest page first; follow next_cursor further into the past.
+  rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse);
+
+  // Delete a message: your own always, anyone else's with manage_messages. The row stays as a tombstone.
+  rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
+
+  // Report an encrypted message, revealing its text together with the author device's attestation.
+  rpc ReportMessage(ReportMessageRequest) returns (ReportMessageResponse);
+
+  // A channel's reports: needs manage_messages.
+  rpc ListReports(ListReportsRequest) returns (ListReportsResponse);
+}
+
+// A message as a client sees it. A deleted one still arrives, with no content or ciphertext and
+// deleted set, because it keeps its place in the conversation.
+message ChannelMessage {
+  string message_id = 1;
+  string channel_id = 2;
+  // Resolve with UserService.LookupUser; a message names a UUID, never a username.
+  string author_id = 3;
+  // Plaintext messages only; absent once deleted.
+  optional string content = 4;
+  // When the server accepted it; the timeline is ordered by this.
+  google.protobuf.Timestamp sent_at = 5;
+  bool deleted = 6;
+  optional google.protobuf.Timestamp deleted_at = 7;
+  optional string deleted_by = 8;
+  // Encrypted messages only: the MLS application message for the channel's group.
+  optional bytes ciphertext = 9;
+  // Encrypted messages only: the epoch it was sent in.
+  optional int64 epoch = 10;
+  // Encrypted messages only: the device that sent it.
+  optional string sender_device_id = 11;
+  // The encrypted files it carries, by id; their names, types and keys are inside the ciphertext.
+  repeated MessageAttachment attachments = 12;
+}
+
+// An encrypted file a message carries, as far as the server can describe it.
+message MessageAttachment {
+  string attachment_id = 1;
+  AttachmentKind kind = 2;
+  // As the sender declared it: lower case, no dot, empty for none.
+  string extension = 3;
+  int64 ciphertext_size = 4;
+  // For checking a download early; the hash that counts is the one inside the encrypted message.
+  optional bytes ciphertext_sha256 = 5;
+}
+
+// A file named in a report's attestation.
+message AttestedAttachment {
+  string attachment_id = 1;
+  bytes ciphertext_sha256 = 2;
+}
+
+// The files a v2 attestation signs. Its presence is what selects v2
+// (raindrop/message-attestation/v2), so it is a message rather than a bare repeated field.
+message AttestedFiles {
+  repeated AttestedAttachment attachments = 1;
+}
+
+// A stored report: the only encrypted-message text the server ever holds.
+message MessageReport {
+  string report_id = 1;
+  string message_id = 2;
+  string channel_id = 3;
+  string author_id = 4;
+  string sender_device_id = 5;
+  string reporter_id = 6;
+  string body = 7;
+  optional string reason = 8;
+  google.protobuf.Timestamp message_sent_at = 9;
+  google.protobuf.Timestamp reported_at = 10;
+}
+
+// Posts a plaintext message.
+message SendMessageRequest {
+  string channel_id = 1;
+  string content = 2;
+}
+
+// The stored message, with its real id and time.
+message SendMessageResponse {
+  ChannelMessage message = 1;
+}
+
+// Posts an encrypted message.
+message SendEncryptedMessageRequest {
+  string channel_id = 1;
+  // The MLS application message the sender's device encrypted in the group's current epoch.
+  bytes message = 2;
+  // Finished uploads to send with it, in the order the message lists them.
+  repeated string attachment_ids = 3;
+}
+
+// The stored message, with its real id and time.
+message SendEncryptedMessageResponse {
+  ChannelMessage message = 1;
+}
+
+// Reads one page of a channel.
+message GetHistoryRequest {
+  string channel_id = 1;
+  // next_cursor from the previous page, passed back untouched; absent for the newest messages.
+  optional string before = 2;
+  // Absent: the server's default page size. More than its maximum is trimmed.
+  optional int32 limit = 3;
+}
+
+// One page, oldest first as it is rendered.
+message GetHistoryResponse {
+  string channel_id = 1;
+  repeated ChannelMessage messages = 2;
+  // For the page before this one; absent at the beginning of the channel.
+  optional string next_cursor = 3;
+}
+
+// Deletes a message.
+message DeleteMessageRequest {
+  string message_id = 1;
+}
+
+// The tombstone.
+message DeleteMessageResponse {
+  ChannelMessage message = 1;
+}
+
+// Reports an encrypted message. Every signed field is exactly as the sender signed it.
+message ReportMessageRequest {
+  string message_id = 1;
+  // The decrypted text the reporter reveals.
+  string body = 2;
+  string client_message_id = 3;
+  int64 client_sent_at_unix_ms = 4;
+  // The payload type, e.g. "text" or "files".
+  string type = 5;
+  // The sender device's Ed25519 signature.
+  bytes attestation = 6;
+  // At most 500 characters.
+  optional string reason = 7;
+  // Present for a message that carries files: the attestation is then a v2 one.
+  optional AttestedFiles attested_files = 8;
+}
+
+// The stored report.
+message ReportMessageResponse {
+  MessageReport report = 1;
+}
+
+// Asks for a channel's reports.
+message ListReportsRequest {
+  string channel_id = 1;
+}
+
+// The channel's reports.
+message ListReportsResponse {
+  repeated MessageReport reports = 1;
+}
