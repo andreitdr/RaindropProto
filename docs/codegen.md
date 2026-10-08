@@ -15,10 +15,11 @@ package, which ships its own `protoc` and C# gRPC plugin:
 ## Client (Dart)
 
 `RaindropClient/tool/gen_protos.sh` runs `protoc` with the Dart plugin into
-`RaindropClient/lib/core/network/grpc/generated/`. It generates:
-- `raindrop/v1/*.proto`
-- the well-known types it uses (`timestamp`, `duration`)
-- `google/rpc/status.proto` and `google/rpc/error_details.proto`, for decoding the error trailer
+`RaindropClient/lib/core/network/grpc/generated/`. It generates `raindrop/v1/*.proto` only:
+- the well-known types (`Timestamp`, `Duration`) come from `package:protobuf`;
+- `google.rpc.Status` and `ErrorInfo` come from `package:grpc`, which decodes the error trailer into
+  `GrpcError.details`. It does not export its `ErrorInfo` class, so the client reads the detail by its
+  type name and field numbers (`ApiException.reasonOf`).
 
 The output **is committed**, so `flutter run` needs no code-generation step, like the rest of the
 client. Rerun the script after any change here.
