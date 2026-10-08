@@ -83,7 +83,8 @@ the endpoint that produces it in `RaindropServer/docs/`.
 `attachments_disabled`, `invalid_attachment`, `file_type_not_allowed`, `file_too_large`,
 `too_many_pending_uploads`, `upload_offset_mismatch`, `chunk_too_large`, `upload_incomplete`,
 `upload_finished`, `hash_mismatch`, `too_many_attachments`, `attachment_already_sent`,
-`attachment_not_found`, `attachment_unavailable`
+`attachment_not_found`, `attachment_unavailable`, `invalid_offset` (a download asked to start past the
+end of the file)
 
 **Voice**
 `voice_unavailable`, `channel_full`, `not_in_voice`
