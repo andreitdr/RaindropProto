@@ -25,7 +25,7 @@ The server's domain layer throws `ApiException` with a kind; the gRPC layer maps
 | unauthorized | `UNAUTHENTICATED` | `missing_token`, `invalid_session`, `invalid_credentials` |
 | forbidden | `PERMISSION_DENIED` | `missing_permission`, `device_required`, `account_left` |
 | not found | `NOT_FOUND` | `channel_not_found`, `attachment_not_found` |
-| conflict | `FAILED_PRECONDITION` | `username_taken`, `epoch_conflict`, `stale_epoch`, `upload_offset_mismatch` |
+| conflict | `FAILED_PRECONDITION` | `username_taken`, `epoch_conflict`, `stale_epoch`, `upload_offset_mismatch`, `camera_limit_reached` |
 | too large | `RESOURCE_EXHAUSTED` | `chunk_too_large` |
 | unavailable | `UNAVAILABLE` | `voice_unavailable` |
 | anything unexpected | `INTERNAL` | `internal_error` |
@@ -87,7 +87,8 @@ the endpoint that produces it in `RaindropServer/docs/`.
 end of the file)
 
 **Voice**
-`voice_unavailable`, `channel_full`, `not_in_voice`
+`voice_unavailable`, `channel_full`, `not_in_voice`, `camera_limit_reached` (every camera place in the
+call is taken; turning a camera on without the `video` permission is `missing_permission` instead)
 
 **Event stream**
 `session_ended`, `too_slow`, `server_stopping`, `connection_lost`
