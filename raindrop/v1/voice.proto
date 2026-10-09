@@ -6,10 +6,10 @@ import "google/protobuf/timestamp.proto";
 
 option csharp_namespace = "RaindropServer.Grpc.Protocol";
 
-// Voice calls. Raindrop decides who may join, speak, show their camera and moderate; the media itself
-// goes over the media transport a join names (LiveKit today: WebRTC, its signalling relayed by this
-// server as a WebSocket, end-to-end encrypted with a key from the channel's MLS group — one key for a
-// call, covering voice and camera alike). This service is the control half only.
+// Voice calls. Raindrop decides who may join, speak, show their camera, share their screen and moderate;
+// the media itself goes over the media transport a join names (LiveKit today: WebRTC, its signalling
+// relayed by this server as a WebSocket, end-to-end encrypted with a key from the channel's MLS group —
+// one key for a call, covering voice, camera and screen alike). This service is the control half only.
 service VoiceService {
   // Whether voice works here, and who is in every call the caller can see.
   rpc GetVoiceStatus(GetVoiceStatusRequest) returns (GetVoiceStatusResponse);
@@ -20,9 +20,11 @@ service VoiceService {
   // Leave the named call. Idempotent; only the session that joined can leave.
   rpc LeaveVoice(LeaveVoiceRequest) returns (LeaveVoiceResponse);
 
-  // Self mute, deafen and camera. Mute and deafen are only everybody's icons; turning the camera on is
-  // also what earns the media transport's permission to send it, so it can be refused: needs video,
-  // and refuses with camera_limit_reached when every camera place in the call is taken.
+  // Self mute, deafen, camera and screen share. Mute and deafen are only everybody's icons; turning the
+  // camera on or starting a screen share is also what earns the media transport's permission to send
+  // it, so either can be refused. The camera needs video, and refuses with camera_limit_reached when
+  // every camera place in the call is taken; a screen share needs screen_share, and refuses with
+  // screen_share_limit_reached when every sharing place is taken.
   rpc SetVoiceSelfState(SetVoiceSelfStateRequest) returns (SetVoiceSelfStateResponse);
 
   // Mute or unmute a member for everyone: needs mute_members server-wide.
@@ -48,6 +50,25 @@ message VoiceParticipant {
   // They may listen and talk but not turn their camera on: they lack video, or every camera place in
   // this call is taken.
   bool camera_suppressed = 10;
+  // They are sharing a screen or a window with the call.
+  bool screen_share_on = 11;
+  // What they are sharing. UNSPECIFIED while screen_share_on is false.
+  ScreenShareKind screen_share_kind = 12;
+  // They are sending the shared window's own sound with it. Only ever with a window, and only while
+  // they may speak: a member muted for everyone sends no sound into the call, whatever its source.
+  bool screen_share_audio = 13;
+  // They may not start a screen share: they lack screen_share, or every sharing place in this call is
+  // taken.
+  bool screen_share_suppressed = 14;
+}
+
+// What a screen share shows. A closed set: there is nothing else a share can be.
+enum ScreenShareKind {
+  SCREEN_SHARE_KIND_UNSPECIFIED = 0;
+  // A whole display. Never carries sound: the host's sound is never sent.
+  SCREEN_SHARE_KIND_SCREEN = 1;
+  // One window, optionally with that window's own sound.
+  SCREEN_SHARE_KIND_WINDOW = 2;
 }
 
 // Asks for voice status.
@@ -65,6 +86,9 @@ message GetVoiceStatusResponse {
   // How many members of one call may send their camera at once. 0 when this server carries no camera
   // video, which is also when it does not advertise voice.video.v1.
   int32 maximum_camera_publishers = 5;
+  // How many members of one call may share their screen at once. 0 when this server carries no screen
+  // sharing, which is also when it does not advertise voice.screen.v1.
+  int32 maximum_screen_shares = 6;
 }
 
 // Joins a call.
@@ -101,13 +125,21 @@ message LeaveVoiceResponse {
   bool left = 1;
 }
 
-// Sets your own mute, deafen and camera.
+// Sets your own mute, deafen, camera and screen share. This is the whole state, not a change: every
+// field is read, so a client must send the share it already has or it ends it.
 message SetVoiceSelfStateRequest {
   bool self_mute = 1;
   bool self_deaf = 2;
   // Turn the camera on or off. A client too old to send this reads as off, which is what it was.
   // Joining never starts the camera, so this is the only way it goes on.
   bool camera_on = 3;
+  // Start or stop sharing. A client too old to send this reads as not sharing, which is what it was.
+  bool screen_share_on = 4;
+  // Required while screen_share_on; refused with invalid_payload when UNSPECIFIED.
+  ScreenShareKind screen_share_kind = 5;
+  // Send the shared window's own sound too. Only with SCREEN_SHARE_KIND_WINDOW, and refused with
+  // invalid_payload on a screen: the host's sound is never sent. Granted only while you may speak.
+  bool screen_share_audio = 6;
 }
 
 // Your state in the call now.
