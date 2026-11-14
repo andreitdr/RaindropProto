@@ -89,6 +89,14 @@ message GetVoiceStatusResponse {
   // How many members of one call may share their screen at once. 0 when this server carries no screen
   // sharing, which is also when it does not advertise voice.screen.v1.
   int32 maximum_screen_shares = 6;
+  // The most lines a shared screen may be sent at on this server: 480, 720 or 1080. 0 when the server
+  // states none (an older one), which a client reads as 1080. A client fits its share inside the box
+  // this names. Honoured by clients rather than enforced: the media is end-to-end encrypted and this
+  // server never sees a frame of it.
+  int32 maximum_screen_share_height = 7;
+  // The most frames a second a shared screen may be sent at on this server: 15, 24, 30 or 60. 0 when
+  // the server states none, which a client reads as 60. Honoured by clients, like the height.
+  int32 maximum_screen_share_frame_rate = 8;
 }
 
 // Joins a call.
