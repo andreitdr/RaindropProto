@@ -61,7 +61,11 @@ the endpoint that produces it in `RaindropServer/docs/`.
 **Sessions and accounts**
 `missing_token`, `invalid_session`, `invalid_credentials`, `invalid_user_id`, `invalid_username`,
 `weak_password`, `username_taken`, `already_registered`, `already_active`, `account_preserved`,
-`account_left`, `no_preserved_account`
+`account_left`, `no_preserved_account`, `invalid_challenge` (a sign-in nonce that is unknown, used, lapsed
+or issued for another UUID), `auth_unavailable` (the server has no identity key for devices to sign
+against), `auth_busy` (too many sign-in challenges outstanding), `rate_limited` (too many session-less calls from
+one address this minute; `RESOURCE_EXHAUSTED`), `authenticator_required`, `invalid_authenticator_code`,
+`authenticator_locked` (too many wrong codes; wait)
 
 **Roles and members**
 `invalid_role_name`, `role_name_taken`, `role_not_found`, `invalid_permission`, `role_immutable`,
@@ -75,7 +79,8 @@ the endpoint that produces it in `RaindropServer/docs/`.
 **End-to-end encryption**
 `device_required`, `invalid_certificate`, `identity_mismatch`, `device_exists`, `device_not_found`,
 `too_many_devices`, `too_many_users`, `no_challenge`, `invalid_signature`, `invalid_backup`,
-`invalid_link`, `link_not_found`, `invalid_mls_message`, `wrong_group`, `group_not_found`, `group_exists`,
+`invalid_link`, `link_not_found`, `invalid_vault`, `vault_not_found`, `invalid_authenticator`,
+`invalid_pairing`, `pairing_not_found`, `pairing_busy`, `invalid_mls_message`, `wrong_group`, `group_not_found`, `group_exists`,
 `epoch_conflict`, `stale_epoch`, `not_allowed_in_group`, `too_many_key_packages`, `invalid_welcome`,
 `certificate_mismatch`
 

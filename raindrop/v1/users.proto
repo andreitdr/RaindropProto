@@ -25,6 +25,14 @@ service UserService {
   // Restore an account that left with its data preserved. Anonymous.
   rpc Rejoin(RejoinRequest) returns (RejoinResponse);
 
+  // A one-time nonce for a device key to sign, to sign in without a password. Anonymous.
+  rpc BeginAuth(BeginAuthRequest) returns (BeginAuthResponse);
+
+  // That signature to a session bound to the device. Registers the account when the UUID has none
+  // (a username is needed then), and the device when the account has not seen it (its certificate
+  // is needed then). Anonymous.
+  rpc CompleteAuth(CompleteAuthRequest) returns (CompleteAuthResponse);
+
   // End this session.
   rpc Logout(LogoutRequest) returns (LogoutResponse);
 
@@ -141,6 +149,42 @@ message RejoinRequest {
 
 // The restored account's session.
 message RejoinResponse {
+  Session session = 1;
+}
+
+// Asks for a sign-in challenge.
+message BeginAuthRequest {
+  string user_id = 1;
+}
+
+// The challenge to sign.
+message BeginAuthResponse {
+  // 32 random bytes, usable once.
+  bytes nonce = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+// Signs in with a device key.
+message CompleteAuthRequest {
+  string user_id = 1;
+  string device_id = 2;
+  // The nonce BeginAuth returned for this user_id.
+  bytes nonce = 3;
+  // Ed25519 by the device's signature key over
+  // "raindrop/auth/v1\n" ‖ u16 length of the server's identity key ‖ that key ‖ nonce.
+  bytes signature = 4;
+  // The device certificate, signed by the account's identity key. Needed the first time this
+  // device signs in here; ignored once the device is registered.
+  optional bytes certificate = 5;
+  // The username to claim. Needed when the UUID has no account yet; ignored otherwise.
+  optional string username = 6;
+  // A 6-digit authenticator code, or one of the backup codes. Needed when the device is new to an
+  // account that has an authenticator; ignored otherwise.
+  optional string authenticator_code = 7;
+}
+
+// The new session, already bound to the device.
+message CompleteAuthResponse {
   Session session = 1;
 }
 

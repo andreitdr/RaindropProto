@@ -45,6 +45,38 @@ service DeviceService {
 
   // The new device collects the approval once it is there.
   rpc TakeDeviceLinkApproval(TakeDeviceLinkApprovalRequest) returns (TakeDeviceLinkApprovalResponse);
+
+  // Replace the caller's identity vault and sealed root: needs a bound session.
+  rpc PutIdentityVault(PutIdentityVaultRequest) returns (PutIdentityVaultResponse);
+
+  // The caller's identity vault and sealed root: needs a bound session.
+  rpc GetIdentityVault(GetIdentityVaultRequest) returns (GetIdentityVaultResponse);
+
+  // The sealed root stored under a recovery lookup id, for a device that has only the recovery
+  // words. Anonymous.
+  rpc GetSealedRoot(GetSealedRootRequest) returns (GetSealedRootResponse);
+
+  // Set or replace the account's authenticator: needs a bound session, so any device still paired
+  // can replace a lost one.
+  rpc EnrollAuthenticator(EnrollAuthenticatorRequest) returns (EnrollAuthenticatorResponse);
+
+  // Remove the account's authenticator: needs a bound session.
+  rpc DisableAuthenticator(DisableAuthenticatorRequest) returns (DisableAuthenticatorResponse);
+
+  // Whether the account has an authenticator, and how many backup codes are left.
+  rpc GetAuthenticatorStatus(GetAuthenticatorStatusRequest) returns (GetAuthenticatorStatusResponse);
+
+  // A device with no account anywhere posts its pairing offer. Anonymous.
+  rpc StartPairing(StartPairingRequest) returns (StartPairingResponse);
+
+  // A paired device fetches the offer, to check it against the pairing code: needs a bound session.
+  rpc GetPairingOffer(GetPairingOfferRequest) returns (GetPairingOfferResponse);
+
+  // A paired device posts its sealed approval: needs a bound session.
+  rpc ApprovePairing(ApprovePairingRequest) returns (ApprovePairingResponse);
+
+  // The new device collects the approval, once. Anonymous; needs the token StartPairing returned.
+  rpc TakePairingApproval(TakePairingApprovalRequest) returns (TakePairingApprovalResponse);
 }
 
 // One device.
@@ -190,5 +222,120 @@ message TakeDeviceLinkApprovalRequest {
 
 // The approval, once an existing device has given it.
 message TakeDeviceLinkApprovalResponse {
+  optional bytes approval = 1;
+}
+
+// Replaces the identity vault.
+message PutIdentityVaultRequest {
+  // 32 lower-case hex characters, derived from the recovery key and this server's identity key.
+  string lookup_id = 1;
+  // The root secret sealed under the recovery key. Opaque.
+  bytes sealed_root = 2;
+  // The vault, sealed under the root. Opaque.
+  bytes vault = 3;
+}
+
+// When it was stored.
+message PutIdentityVaultResponse {
+  google.protobuf.Timestamp updated_at = 1;
+}
+
+// Asks for the caller's identity vault.
+message GetIdentityVaultRequest {}
+
+// The vault, if there is one.
+message GetIdentityVaultResponse {
+  optional string lookup_id = 1;
+  optional bytes sealed_root = 2;
+  optional bytes vault = 3;
+  optional google.protobuf.Timestamp updated_at = 4;
+}
+
+// Asks for a sealed root by its lookup id.
+message GetSealedRootRequest {
+  string lookup_id = 1;
+}
+
+// The sealed root.
+message GetSealedRootResponse {
+  bytes sealed_root = 1;
+}
+
+// Sets the account's authenticator.
+message EnrollAuthenticatorRequest {
+  // The TOTP secret (RFC 6238: SHA-1, 30 seconds, 6 digits), 20 to 64 bytes.
+  bytes secret = 1;
+  // A current code from that secret, proving the authenticator app holds it.
+  string code = 2;
+  // One-time backup codes, at most 10, each 8 to 32 characters. Stored hashed.
+  repeated string backup_codes = 3;
+}
+
+// A human-readable confirmation.
+message EnrollAuthenticatorResponse {
+  string message = 1;
+}
+
+// Removes the account's authenticator.
+message DisableAuthenticatorRequest {}
+
+// A human-readable confirmation.
+message DisableAuthenticatorResponse {
+  string message = 1;
+}
+
+// Asks about the account's authenticator.
+message GetAuthenticatorStatusRequest {}
+
+// Whether there is one.
+message GetAuthenticatorStatusResponse {
+  bool enabled = 1;
+  int32 backup_codes_left = 2;
+}
+
+// Starts a pairing.
+message StartPairingRequest {
+  // The new device's pairing offer: opaque, at most 1 KiB.
+  bytes offer = 1;
+}
+
+// The pairing to show in the pairing code.
+message StartPairingResponse {
+  string pairing_id = 1;
+  // Kept by the new device and sent back to collect the approval.
+  string take_token = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+// Fetches a pairing's offer.
+message GetPairingOfferRequest {
+  string pairing_id = 1;
+}
+
+// The offer, for checking against the pairing code's commitment.
+message GetPairingOfferResponse {
+  bytes offer = 1;
+}
+
+// Approves a pairing.
+message ApprovePairingRequest {
+  string pairing_id = 1;
+  // Sealed to the new device; at most 512 KiB.
+  bytes approval = 2;
+}
+
+// A human-readable confirmation.
+message ApprovePairingResponse {
+  string message = 1;
+}
+
+// Collects a pairing's approval.
+message TakePairingApprovalRequest {
+  string pairing_id = 1;
+  string take_token = 2;
+}
+
+// The approval, once a paired device has given it.
+message TakePairingApprovalResponse {
   optional bytes approval = 1;
 }
