@@ -66,6 +66,13 @@ service DeviceService {
   // Whether the account has an authenticator, and how many backup codes are left.
   rpc GetAuthenticatorStatus(GetAuthenticatorStatusRequest) returns (GetAuthenticatorStatusResponse);
 
+  // The waits to add a device without an authenticator code (UserService.RequestRecovery) running on
+  // the account: needs a bound session.
+  rpc GetRecoveryStatus(GetRecoveryStatusRequest) returns (GetRecoveryStatusResponse);
+
+  // Cancels every one of them, for good: needs a bound session.
+  rpc CancelRecovery(CancelRecoveryRequest) returns (CancelRecoveryResponse);
+
   // A device with no account anywhere posts its pairing offer. Anonymous.
   rpc StartPairing(StartPairingRequest) returns (StartPairingResponse);
 
@@ -256,9 +263,12 @@ message GetSealedRootRequest {
   string lookup_id = 1;
 }
 
-// The sealed root.
+// The sealed root, and the vault sealed under it.
 message GetSealedRootResponse {
   bytes sealed_root = 1;
+  // The vault (its server list above all), sealed under the root: it opens only once the sealed root
+  // has. Lets a device recovering with the words reach every server at once, before signing in.
+  bytes vault = 2;
 }
 
 // Sets the account's authenticator.
@@ -291,6 +301,30 @@ message GetAuthenticatorStatusRequest {}
 message GetAuthenticatorStatusResponse {
   bool enabled = 1;
   int32 backup_codes_left = 2;
+}
+
+// A device waiting to be added to the account without an authenticator code.
+message PendingRecovery {
+  string device_id = 1;
+  google.protobuf.Timestamp requested_at = 2;
+  // When it gets in, unless cancelled before then.
+  google.protobuf.Timestamp eligible_at = 3;
+}
+
+// Asks for the running recovery waits.
+message GetRecoveryStatusRequest {}
+
+// The running waits, oldest first; empty when there are none.
+message GetRecoveryStatusResponse {
+  repeated PendingRecovery recoveries = 1;
+}
+
+// Cancels every running recovery wait.
+message CancelRecoveryRequest {}
+
+// How many were running.
+message CancelRecoveryResponse {
+  int32 cancelled = 1;
 }
 
 // Starts a pairing.

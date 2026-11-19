@@ -7,7 +7,7 @@ import "google/protobuf/timestamp.proto";
 option csharp_namespace = "RaindropServer.Grpc.Protocol";
 
 // Accounts and sessions. A client holds its own UUID per server; the first login with it is
-// registration. Every call but the first six needs a session: send its token as
+// registration. Every call but the first eight needs a session: send its token as
 // `authorization: Bearer <token>` metadata.
 service UserService {
   // What this UUID means here, so a client knows which flow to show. Anonymous.
@@ -32,6 +32,14 @@ service UserService {
   // (a username is needed then), and the device when the account has not seen it (its certificate
   // is needed then). Anonymous.
   rpc CompleteAuth(CompleteAuthRequest) returns (CompleteAuthResponse);
+
+  // Starts the wait that lets a device new to the account in without an authenticator code, for a
+  // person who has their recovery words but lost the authenticator and its backup codes. Proven like
+  // CompleteAuth: a BeginAuth nonce signed by the device, and its certificate. The account's devices
+  // are told at once (recovery_changed) and any of them can cancel it (DeviceService.CancelRecovery);
+  // once eligible_at has passed, CompleteAuth lets this device in with no code. Asking again for the
+  // same device answers with the wait already running. Anonymous.
+  rpc RequestRecovery(RequestRecoveryRequest) returns (RequestRecoveryResponse);
 
   // End this session.
   rpc Logout(LogoutRequest) returns (LogoutResponse);
@@ -186,6 +194,25 @@ message CompleteAuthRequest {
 // The new session, already bound to the device.
 message CompleteAuthResponse {
   Session session = 1;
+}
+
+// Starts waiting to add a device without an authenticator code.
+message RequestRecoveryRequest {
+  string user_id = 1;
+  string device_id = 2;
+  // A nonce BeginAuth returned for this user_id.
+  bytes nonce = 3;
+  // Ed25519 by the device's signature key over the same bytes CompleteAuth signs.
+  bytes signature = 4;
+  // The device certificate, signed by the account's identity key.
+  bytes certificate = 5;
+}
+
+// The wait for this device.
+message RequestRecoveryResponse {
+  google.protobuf.Timestamp requested_at = 1;
+  // From then on, CompleteAuth lets this device in without an authenticator code.
+  google.protobuf.Timestamp eligible_at = 2;
 }
 
 // Ends the calling session.

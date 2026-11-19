@@ -4,6 +4,7 @@ package raindrop.v1;
 
 import "google/protobuf/duration.proto";
 import "raindrop/v1/channels.proto";
+import "raindrop/v1/devices.proto";
 import "raindrop/v1/members.proto";
 import "raindrop/v1/roles.proto";
 import "raindrop/v1/text.proto";
@@ -89,6 +90,9 @@ message ServerEvent {
     GroupReconcileEvent group_reconcile = 23;
     // To its owner: a device is running out of one-time key packages.
     KeyPackagesLowEvent key_packages_low = 24;
+    // To the account: a wait to add a device without an authenticator code started, was cancelled or
+    // ended. Not you? Cancel it (DeviceService.CancelRecovery) and make new recovery words.
+    RecoveryChangedEvent recovery_changed = 25;
 
     // An event a server plugin publishes. Built-in events never use it.
     PluginEvent plugin = 100;
@@ -178,6 +182,11 @@ message GroupReconcileEvent {
 message KeyPackagesLowEvent {
   string device_id = 1;
   int32 remaining = 2;
+}
+
+// The account's running recovery waits, all of them.
+message RecoveryChangedEvent {
+  repeated PendingRecovery recoveries = 1;
 }
 
 // An event from a server plugin.

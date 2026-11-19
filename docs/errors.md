@@ -65,7 +65,12 @@ the endpoint that produces it in `RaindropServer/docs/`.
 or issued for another UUID), `auth_unavailable` (the server has no identity key for devices to sign
 against), `auth_busy` (too many sign-in challenges outstanding), `rate_limited` (too many session-less calls from
 one address this minute; `RESOURCE_EXHAUSTED`), `authenticator_required`, `invalid_authenticator_code`,
-`authenticator_locked` (too many wrong codes; wait)
+`authenticator_locked` (too many wrong codes; wait), and for a device waiting to get in without an
+authenticator code (`RequestRecovery`): `recovery_pending` (the wait is still running; `CompleteAuth`
+without a code), `recovery_cancelled` (one of the account's devices cancelled this device's wait),
+`recovery_unavailable` (this server lets nobody in without a code), `recovery_not_needed` (the account has
+no authenticator, so the device can simply sign in), `too_many_recoveries` (five devices are already
+waiting)
 
 **Roles and members**
 `invalid_role_name`, `role_name_taken`, `role_not_found`, `invalid_permission`, `role_immutable`,
