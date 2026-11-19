@@ -189,6 +189,11 @@ message CompleteAuthRequest {
   // A 6-digit authenticator code, or one of the backup codes. Needed when the device is new to an
   // account that has an authenticator; ignored otherwise.
   optional string authenticator_code = 7;
+  // A claim code the server's owner issued from the console ("RDC1-<user id>-<secret>", single use,
+  // a day): a device whose identity is new to the account takes it over. The account's old identity,
+  // devices, vault and authenticator are reset first, as ResetIdentity resets them, and every member
+  // is sent identity_reset. For a person who lost every device, the recovery words and any backup.
+  optional string claim_code = 8;
 }
 
 // The new session, already bound to the device.

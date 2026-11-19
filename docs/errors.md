@@ -70,7 +70,7 @@ authenticator code (`RequestRecovery`): `recovery_pending` (the wait is still ru
 without a code), `recovery_cancelled` (one of the account's devices cancelled this device's wait),
 `recovery_unavailable` (this server lets nobody in without a code), `recovery_not_needed` (the account has
 no authenticator, so the device can simply sign in), `too_many_recoveries` (five devices are already
-waiting)
+waiting), and `invalid_claim` (a claim code that is wrong, spent, lapsed or for another account)
 
 **Roles and members**
 `invalid_role_name`, `role_name_taken`, `role_not_found`, `invalid_permission`, `role_immutable`,
