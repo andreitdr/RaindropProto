@@ -59,14 +59,21 @@ message Role {
   RoleKind kind = 3;
   // Presentation order, highest first.
   int32 position = 4;
+  // Only the permissions this server's build understands. A role saved by a newer build may hold names
+  // an older one does not; the server keeps them but never sends or grants them.
   repeated string permissions = 5;
   google.protobuf.Timestamp created_at = 6;
 }
 
-// One permission this build understands.
+// One permission this build understands. Enough to show a permission a client has never heard of.
 message PermissionDescription {
   string name = 1;
   string summary = 2;
+  // A short label for an editor, e.g. "Manage roles". Absent from older servers: derive one from name.
+  optional string title = 3;
+  // An open set grouping the editor: "general", "text", "voice", "channels", "moderation",
+  // "administration". Empty from older servers, and a client files a group it does not know as other.
+  string category = 4;
 }
 
 // A permission set whose presence means something: absent leaves a role's permissions alone, present
@@ -86,7 +93,8 @@ message ListRolesResponse {
 // Asks what the caller holds.
 message GetMyRolesRequest {}
 
-// The caller's roles (everyone first) and the expanded union of what they grant.
+// The caller's roles (the everyone role included, highest position first, so it comes last) and the
+// expanded union of what they grant.
 message GetMyRolesResponse {
   string user_id = 1;
   repeated Role roles = 2;
@@ -155,7 +163,8 @@ message GetMemberRolesRequest {
   string user_id = 1;
 }
 
-// That member's roles (everyone first) and the expanded union of what they grant.
+// That member's roles (the everyone role included, highest position first, so it comes last) and the
+// expanded union of what they grant.
 message GetMemberRolesResponse {
   string user_id = 1;
   repeated Role roles = 2;

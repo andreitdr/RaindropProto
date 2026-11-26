@@ -18,10 +18,10 @@ service ChannelService {
   // Create a channel of a given type.
   rpc CreateChannel(CreateChannelRequest) returns (CreateChannelResponse);
 
-  // Rename it: needs rename_channels, or having created it.
+  // Rename it: needs rename_channels.
   rpc RenameChannel(RenameChannelRequest) returns (RenameChannelResponse);
 
-  // Delete it and everything in it: needs delete_channels, or having created it.
+  // Delete it and everything in it: needs delete_channels.
   rpc DeleteChannel(DeleteChannelRequest) returns (DeleteChannelResponse);
 }
 

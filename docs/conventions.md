@@ -34,7 +34,13 @@
 
 **Open sets are strings.** A plugin or a newer build can add to them, and a client ignores or
 generically renders a value it does not know:
-- permission names (`view_channel`, …), driven by the server's `PermissionNames` table
+- permission names (`view_channel`, …), driven by the server's `PermissionNames` table. Each server
+  build lists the ones it knows in `RoleService.ListPermissions`, with a `title` and a `category` (itself
+  an open set: `general`, `text`, `voice`, `channels`, `moderation`, `administration`), so a role editor
+  draws only from that list and can show a permission the client was never built with. A server older
+  than those two fields sends neither: derive a title from the name and file it under "other". A role
+  carries only the names its server's build knows; one saved by a newer build keeps the rest on the
+  server, unsent and ungranted, until that build runs again
 - channel types (`text`, `voice`)
 - voice leave reasons and transport names
 - capability names
