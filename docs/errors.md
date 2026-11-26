@@ -25,7 +25,7 @@ The server's domain layer throws `ApiException` with a kind; the gRPC layer maps
 | unauthorized | `UNAUTHENTICATED` | `missing_token`, `invalid_session`, `invalid_credentials` |
 | forbidden | `PERMISSION_DENIED` | `missing_permission`, `device_required`, `account_left` |
 | not found | `NOT_FOUND` | `channel_not_found`, `attachment_not_found` |
-| conflict | `FAILED_PRECONDITION` | `username_taken`, `epoch_conflict`, `stale_epoch`, `upload_offset_mismatch`, `camera_limit_reached`, `screen_share_limit_reached` |
+| conflict | `FAILED_PRECONDITION` | `username_taken`, `epoch_conflict`, `stale_epoch`, `report_mismatch`, `upload_offset_mismatch`, `camera_limit_reached`, `screen_share_limit_reached` |
 | too large | `RESOURCE_EXHAUSTED` | `chunk_too_large` |
 | unavailable | `UNAVAILABLE` | `voice_unavailable` |
 | anything unexpected | `INTERNAL` | `internal_error` |
@@ -87,7 +87,12 @@ waiting), and `invalid_claim` (a claim code that is wrong, spent, lapsed or for 
 `invalid_link`, `link_not_found`, `invalid_vault`, `vault_not_found`, `invalid_authenticator`,
 `invalid_pairing`, `pairing_not_found`, `pairing_busy`, `invalid_mls_message`, `wrong_group`, `group_not_found`, `group_exists`,
 `epoch_conflict`, `stale_epoch`, `not_allowed_in_group`, `too_many_key_packages`, `invalid_welcome`,
-`certificate_mismatch`
+`certificate_mismatch`, and for recovering a broken group (`DeliveryService.ResetGroup`, `CreateGroup`):
+`report_mismatch` (the reported hash is neither a logged commit at that epoch nor the group info),
+`group_info_pending` (the group info has not had time to catch up with the epoch yet), `group_reserved` (only
+the device that reset the group may create its new generation yet) and `rate_limited` (the member reset the
+channel's group a moment ago). `wrong_group` also covers a message for an earlier generation of the channel's
+group, and `not_allowed_in_group` a device or account a channel manager banned from it.
 
 **Attachments**
 `attachments_disabled`, `invalid_attachment`, `file_type_not_allowed`, `file_too_large`,

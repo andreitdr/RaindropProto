@@ -93,6 +93,8 @@ message ServerEvent {
     // To the account: a wait to add a device without an authenticator code started, was cancelled or
     // ended. Not you? Cancel it (DeviceService.CancelRecovery) and make new recovery words.
     RecoveryChangedEvent recovery_changed = 25;
+    // A channel's group started a new generation: leave the old one and join this one.
+    GroupResetEvent group_reset = 26;
 
     // An event a server plugin publishes. Built-in events never use it.
     PluginEvent plugin = 100;
@@ -176,6 +178,12 @@ message WelcomeEvent {
 // A group's membership may need reconciling.
 message GroupReconcileEvent {
   string channel_id = 1;
+}
+
+// A channel's group was reset to a new generation.
+message GroupResetEvent {
+  string channel_id = 1;
+  int64 generation = 2;
 }
 
 // A device is running out of key packages.

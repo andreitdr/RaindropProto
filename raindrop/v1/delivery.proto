@@ -2,11 +2,17 @@ syntax = "proto3";
 
 package raindrop.v1;
 
+import "google/protobuf/timestamp.proto";
+
 option csharp_namespace = "RaindropServer.Grpc.Protocol";
 
-// The MLS delivery service: one group per channel (group id = the channel UUID as 16 big-endian
-// bytes), one commit per epoch, key packages and Welcomes. Every MLS structure is opaque bytes the
-// server reads only the cleartext framing of. Every call needs a bound session.
+// The MLS delivery service: one group per channel, one commit per epoch, key packages and Welcomes.
+// Every MLS structure is opaque bytes the server reads only the cleartext framing of. Every call needs
+// a bound session.
+//
+// A channel's group has a generation, 0 until a member resets it (ResetGroup) because its current
+// group can no longer be followed. The MLS group id names both: the channel UUID as 16 big-endian
+// bytes for generation 0, followed by the generation as 8 big-endian bytes for any later one.
 service DeliveryService {
   // Start a channel's group from its first group info.
   rpc CreateGroup(CreateGroupRequest) returns (CreateGroupResponse);
@@ -40,6 +46,29 @@ service DeliveryService {
 
   // Drop Welcomes this device has processed.
   rpc AckWelcomes(AckWelcomesRequest) returns (AckWelcomesResponse);
+
+  // Which generation of the channel's group is current; answered whether or not that generation's
+  // group has been created yet.
+  rpc GetGroupGeneration(GetGroupGenerationRequest) returns (GetGroupGenerationResponse);
+
+  // Start a new generation of the channel's group because the current one can no longer be followed.
+  // A member reports the commit (or group info) it cannot get past; a channel manager
+  // (delete_channels) may reset without one. Answers the current generation without resetting when
+  // the caller's generation is already behind it.
+  rpc ResetGroup(ResetGroupRequest) returns (ResetGroupResponse);
+
+  // Channel managers: every reset of the channel's group, with who asked and whose commit they
+  // reported.
+  rpc ListGroupResets(ListGroupResetsRequest) returns (ListGroupResetsResponse);
+
+  // Channel managers: keep a device, or every device of an account, out of the channel's group.
+  rpc BanFromGroup(BanFromGroupRequest) returns (BanFromGroupResponse);
+
+  // Channel managers: lift a ban.
+  rpc UnbanFromGroup(UnbanFromGroupRequest) returns (UnbanFromGroupResponse);
+
+  // Channel managers: the bans on the channel's group.
+  rpc ListGroupBans(ListGroupBansRequest) returns (ListGroupBansResponse);
 }
 
 // A device, named by its owner and its own id.
@@ -57,6 +86,8 @@ message GroupState {
   optional bytes group_info = 3;
   // The epoch group_info describes; behind epoch until a member publishes a newer one.
   int64 group_info_epoch = 4;
+  // The group's generation, which its MLS group id names.
+  int64 generation = 5;
 }
 
 // One accepted commit.
@@ -132,14 +163,19 @@ message PutGroupInfoResponse {
 message SyncGroupRequest {
   string channel_id = 1;
   int64 from_epoch = 2;
+  // The generation this device's group is in.
+  int64 generation = 3;
 }
 
 // Commits from the requested epoch on, oldest first — possibly one page of many.
 message SyncGroupResponse {
   int64 epoch = 1;
   repeated GroupCommit commits = 2;
-  // Commits this device needs have been pruned: rejoin by external commit.
+  // Commits this device needs have been pruned, or its group is of an older generation: rejoin, in
+  // the generation below.
   bool resync_required = 3;
+  // The group's current generation.
+  int64 generation = 4;
 }
 
 // Asks who belongs in a group.
@@ -201,4 +237,107 @@ message AckWelcomesRequest {
 // A human-readable confirmation.
 message AckWelcomesResponse {
   string message = 1;
+}
+
+// Asks which generation a channel's group is in.
+message GetGroupGenerationRequest {
+  string channel_id = 1;
+}
+
+// The channel group's current generation.
+message GetGroupGenerationResponse {
+  int64 generation = 1;
+}
+
+// Asks for a new generation of a channel's group.
+message ResetGroupRequest {
+  string channel_id = 1;
+  // The generation the caller found broken; behind the current one, nothing is reset.
+  int64 generation = 2;
+  // The epoch of what the caller cannot get past: a commit made in it, or the group info describing it.
+  int64 reported_epoch = 3;
+  // SHA-256 of that commit or group info, exactly as the server holds it. Empty only for a channel
+  // manager resetting without a report.
+  bytes reported_sha256 = 4;
+}
+
+// The generation the channel's group is in now.
+message ResetGroupResponse {
+  int64 generation = 1;
+  // True when this call started it; false when another reset had already moved past the caller's.
+  bool reset = 2;
+}
+
+// One reset of a channel's group.
+message GroupReset {
+  // The generation it started.
+  int64 generation = 1;
+  google.protobuf.Timestamp reset_at = 2;
+  // Who asked, from which device.
+  string requested_by_user_id = 3;
+  string requested_by_device_id = 4;
+  // What they reported: "commit", "group_info", or empty for a manager's reset without a report.
+  // An open set.
+  string reported_kind = 5;
+  int64 reported_epoch = 6;
+  bytes reported_sha256 = 7;
+  // For a reported commit: the account and device that submitted it, as the server recorded them.
+  // Empty when unknown.
+  string reported_sender_user_id = 8;
+  string reported_sender_device_id = 9;
+}
+
+// Asks for a channel group's resets.
+message ListGroupResetsRequest {
+  string channel_id = 1;
+}
+
+// The resets, newest first.
+message ListGroupResetsResponse {
+  repeated GroupReset resets = 1;
+}
+
+// A device, or every device of an account, kept out of a channel's group.
+message GroupBan {
+  string user_id = 1;
+  // Empty for every device of the account.
+  string device_id = 2;
+  string banned_by_user_id = 3;
+  google.protobuf.Timestamp banned_at = 4;
+}
+
+// Bans a device, or an account, from a channel's group.
+message BanFromGroupRequest {
+  string channel_id = 1;
+  string user_id = 2;
+  // Empty for every device of the account.
+  string device_id = 3;
+}
+
+// Whether anything changed (false when the ban was already there).
+message BanFromGroupResponse {
+  bool changed = 1;
+}
+
+// Lifts a ban.
+message UnbanFromGroupRequest {
+  string channel_id = 1;
+  string user_id = 2;
+  // Empty for the ban on every device of the account.
+  string device_id = 3;
+}
+
+// Whether anything changed (false when there was no such ban).
+message UnbanFromGroupResponse {
+  bool changed = 1;
+}
+
+// Asks for a channel group's bans.
+message ListGroupBansRequest {
+  string channel_id = 1;
+}
+
+// The bans.
+message ListGroupBansResponse {
+  repeated GroupBan bans = 1;
 }
